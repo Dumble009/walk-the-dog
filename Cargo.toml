@@ -35,7 +35,14 @@ wee_alloc = { version = "0.4.2", optional = true }
 # like the DOM.
 [dependencies.web-sys]
 version = "0.3.22"
-features = ["console"]
+features = [
+    "console",
+    "Window",
+    "Document",
+    "HtmlCanvasElement",
+    "CanvasRenderingContext2d",
+    "Element",
+]
 
 # These crates are used for running unit tests.
 [dev-dependencies]
