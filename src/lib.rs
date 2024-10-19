@@ -9,6 +9,7 @@ use wasm_bindgen::JsCast;
 
 #[macro_use]
 mod browser;
+mod engine;
 
 // When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
 // allocator.
@@ -110,31 +111,15 @@ pub fn main_js() -> Result<(), JsValue> {
     let context = browser::context().expect("Could not get browser context");
 
     browser::spawn_local(async move {
-        let image = web_sys::HtmlImageElement::new().unwrap();
         let json = browser::fetch_json("rhb.json")
             .await
             .expect("Could not featch rhb.json");
         let sheet: Sheet = serde_wasm_bindgen::from_value(json)
             .expect("Could not convert rhb.json into a Sheet structure.");
 
-        let (success_tx, success_rx) = futures::channel::oneshot::channel::<Result<(), JsValue>>();
-        let success_tx = Rc::new(Mutex::new(Some(success_tx)));
-        let error_tx = Rc::clone(&success_tx);
-        let callback = Closure::once(move || {
-            if let Some(success_tx) = success_tx.lock().ok().and_then(|mut opt| opt.take()) {
-                success_tx.send(Ok(()));
-            }
-            web_sys::console::log_1(&JsValue::from_str("loaded!"));
-        });
-        let error_callback = Closure::once(move |err| {
-            if let Some(error_tx) = error_tx.lock().ok().and_then(|mut opt| opt.take()) {
-                error_tx.send(Err(err));
-            }
-        });
-        image.set_onload(Some(callback.as_ref().unchecked_ref()));
-        image.set_onerror(Some(error_callback.as_ref().unchecked_ref()));
-        image.set_src("rhb.png");
-        success_rx.await;
+        let image = engine::load_image("rhb.png")
+            .await
+            .expect("Could not load rhb.png");
 
         let mut frame = -1;
         let interval_callback = Closure::wrap(Box::new(move || {
