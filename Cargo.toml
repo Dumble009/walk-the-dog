@@ -51,6 +51,7 @@ features = [
     "Element",
     "HtmlImageElement",
     "Response",
+    "Performance",
 ]
 
 # These crates are used for running unit tests.

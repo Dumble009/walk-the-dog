@@ -2,8 +2,6 @@ use rand::thread_rng;
 use rand::Rng;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::sync::Mutex;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -149,5 +147,6 @@ pub fn main_js() -> Result<(), JsValue> {
         interval_callback.forget();
     });
     web_sys::console::log_1(&JsValue::from_str("waiting..."));
+
     Ok(())
 }
