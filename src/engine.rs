@@ -14,6 +14,12 @@ use wasm_bindgen::JsCast;
 use web_sys::CanvasRenderingContext2d;
 use web_sys::HtmlImageElement;
 
+#[derive(Clone, Copy)]
+pub struct Point {
+    pub x: i16,
+    pub y: i16,
+}
+
 #[async_trait(?Send)]
 pub trait Game {
     async fn initialize(&self) -> Result<Box<dyn Game>>;
@@ -152,7 +158,7 @@ fn prepare_input() -> Result<UnboundedReceiver<KeyPress>> {
     let onkeyup = browser::closure_wrap(Box::new(move |keycode: web_sys::KeyboardEvent| {
         keyup_sender
             .borrow_mut()
-            .start_send(KeyPress::KeyDown(keycode));
+            .start_send(KeyPress::KeyUp(keycode));
     }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
 
     browser::canvas()
