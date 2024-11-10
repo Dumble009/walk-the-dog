@@ -1,5 +1,6 @@
 use crate::browser;
 use crate::engine;
+use crate::engine::KeyState;
 use crate::engine::{Game, Rect, Renderer};
 use anyhow::Result;
 use async_trait::async_trait;
@@ -55,7 +56,7 @@ impl Game for WalkTheDog {
         }))
     }
 
-    fn update(&mut self) {
+    fn update(&mut self, keystate: &KeyState) {
         self.frame = (self.frame + 1) % 23;
     }
 
