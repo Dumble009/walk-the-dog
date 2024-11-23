@@ -91,6 +91,10 @@ impl RedHatBoy {
             },
         );
     }
+
+    fn update(&mut self) {
+        self.state_machine = self.state_machine.update();
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -192,6 +196,20 @@ mod red_hat_boy_states {
                 RedHatBoyStateMachine::Running(state) => &state.context(),
             }
         }
+
+        pub fn update(self) -> Self {
+            match self {
+                RedHatBoyStateMachine::Idle(mut state) => {
+                    if state.context.frame < 29 {
+                        state.context.frame += 1;
+                    } else {
+                        state.context.frame = 0;
+                    }
+                    RedHatBoyStateMachine::Idle(state)
+                }
+                RedHatBoyStateMachine::Running(_) => self,
+            }
+        }
     }
 }
 
@@ -236,6 +254,8 @@ impl Game for WalkTheDog {
 
         self.position.x += velocity.x;
         self.position.y += velocity.y;
+
+        self.rhb.as_mut().unwrap().update();
     }
 
     fn draw(&self, renderer: &Renderer) {
