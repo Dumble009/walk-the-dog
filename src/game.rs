@@ -95,6 +95,10 @@ impl RedHatBoy {
     fn update(&mut self) {
         self.state_machine = self.state_machine.update();
     }
+
+    fn run_right(&mut self) {
+        self.state_machine = self.state_machine.transition(Event::Run);
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -103,12 +107,51 @@ enum RedHatBoyStateMachine {
     Running(RedHatBoyState<Running>),
 }
 
+impl RedHatBoyStateMachine {
+    fn transition(self, event: Event) -> Self {
+        match (self, event) {
+            (RedHatBoyStateMachine::Idle(state), Event::Run) => state.run().into(),
+            _ => self,
+        }
+    }
+
+    pub fn frame_name(&self) -> &str {
+        match self {
+            RedHatBoyStateMachine::Idle(state) => state.frame_name(),
+            RedHatBoyStateMachine::Running(state) => state.frame_name(),
+        }
+    }
+
+    pub fn context(&self) -> &RedHatBoyContext {
+        match self {
+            RedHatBoyStateMachine::Idle(state) => &state.context(),
+            RedHatBoyStateMachine::Running(state) => &state.context(),
+        }
+    }
+
+    pub fn update(self) -> Self {
+        match self {
+            RedHatBoyStateMachine::Idle(mut state) => {
+                state.update();
+                RedHatBoyStateMachine::Idle(state)
+            }
+            RedHatBoyStateMachine::Running(mut state) => {
+                state.update();
+                RedHatBoyStateMachine::Running(state)
+            }
+        }
+    }
+}
+
 mod red_hat_boy_states {
     use super::RedHatBoyStateMachine;
     use crate::engine::Point;
     const FLOOR: i16 = 475;
     const IDLE_FRAME_NAME: &str = "Idle";
     const RUN_FRAME_NAME: &str = "Run";
+    const IDLE_FRAMES: u8 = 29;
+    const RUNNING_FRAMES: u8 = 23;
+    const RUNNING_SPEED: i16 = 3;
 
     #[derive(Copy, Clone)]
     pub struct RedHatBoyState<S> {
@@ -136,9 +179,9 @@ mod red_hat_boy_states {
     pub struct Running;
 
     impl RedHatBoyState<Idle> {
-        fn run(self) -> RedHatBoyState<Running> {
+        pub fn run(self) -> RedHatBoyState<Running> {
             RedHatBoyState {
-                context: self.context,
+                context: self.context.reset_frame().run_right(),
                 _state: Running {},
             }
         }
@@ -157,11 +200,19 @@ mod red_hat_boy_states {
         pub fn frame_name(&self) -> &str {
             IDLE_FRAME_NAME
         }
+
+        pub fn update(&mut self) {
+            self.context = self.context.update(IDLE_FRAMES);
+        }
     }
 
     impl RedHatBoyState<Running> {
         pub fn frame_name(&self) -> &str {
             RUN_FRAME_NAME
+        }
+
+        pub fn update(&mut self) {
+            self.context = self.context.update(RUNNING_FRAMES);
         }
     }
 
@@ -175,40 +226,26 @@ mod red_hat_boy_states {
         Run,
     }
 
-    impl RedHatBoyStateMachine {
-        fn transition(self, event: Event) -> Self {
-            match (self, event) {
-                (RedHatBoyStateMachine::Idle(state), Event::Run) => state.run().into(),
-                _ => self,
+    impl RedHatBoyContext {
+        fn update(mut self, frame_count: u8) -> Self {
+            if self.frame < frame_count {
+                self.frame += 1;
+            } else {
+                self.frame = 0;
             }
+            self.position.x += self.velocity.x;
+            self.position.y += self.velocity.y;
+            self
         }
 
-        pub fn frame_name(&self) -> &str {
-            match self {
-                RedHatBoyStateMachine::Idle(state) => state.frame_name(),
-                RedHatBoyStateMachine::Running(state) => state.frame_name(),
-            }
+        fn reset_frame(mut self) -> Self {
+            self.frame = 0;
+            self
         }
 
-        pub fn context(&self) -> &RedHatBoyContext {
-            match self {
-                RedHatBoyStateMachine::Idle(state) => &state.context(),
-                RedHatBoyStateMachine::Running(state) => &state.context(),
-            }
-        }
-
-        pub fn update(self) -> Self {
-            match self {
-                RedHatBoyStateMachine::Idle(mut state) => {
-                    if state.context.frame < 29 {
-                        state.context.frame += 1;
-                    } else {
-                        state.context.frame = 0;
-                    }
-                    RedHatBoyStateMachine::Idle(state)
-                }
-                RedHatBoyStateMachine::Running(_) => self,
-            }
+        fn run_right(mut self) -> Self {
+            self.velocity.x += RUNNING_SPEED;
+            self
         }
     }
 }
@@ -246,6 +283,7 @@ impl Game for WalkTheDog {
 
         if keystate.is_pressed("ArrowRight") {
             velocity.x += 3;
+            self.rhb.as_mut().unwrap().run_right();
         }
 
         if keystate.is_pressed("ArrowLeft") {
