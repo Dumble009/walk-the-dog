@@ -42,6 +42,7 @@ enum Event {
     Run,
     Slide,
     Update,
+    Jump,
 }
 
 struct RedHatBoy {
@@ -100,6 +101,10 @@ impl RedHatBoy {
     fn slide(&mut self) {
         self.state_machine = self.state_machine.transition(Event::Slide);
     }
+
+    fn jump(&mut self) {
+        self.state_machine = self.state_machine.transition(Event::Jump);
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -107,6 +112,7 @@ enum RedHatBoyStateMachine {
     Idle(RedHatBoyState<Idle>),
     Running(RedHatBoyState<Running>),
     Sliding(RedHatBoyState<Sliding>),
+    Jumping(RedHatBoyState<Jumping>),
 }
 
 impl RedHatBoyStateMachine {
@@ -114,9 +120,11 @@ impl RedHatBoyStateMachine {
         match (self, event) {
             (RedHatBoyStateMachine::Idle(state), Event::Run) => state.run().into(),
             (RedHatBoyStateMachine::Running(state), Event::Slide) => state.slide().into(),
+            (RedHatBoyStateMachine::Running(state), Event::Jump) => state.jump().into(),
             (RedHatBoyStateMachine::Idle(state), Event::Update) => state.update().into(),
             (RedHatBoyStateMachine::Running(state), Event::Update) => state.update().into(),
             (RedHatBoyStateMachine::Sliding(state), Event::Update) => state.update().into(),
+            (RedHatBoyStateMachine::Jumping(state), Event::Update) => state.update().into(),
             _ => self,
         }
     }
@@ -126,6 +134,7 @@ impl RedHatBoyStateMachine {
             RedHatBoyStateMachine::Idle(state) => state.frame_name(),
             RedHatBoyStateMachine::Running(state) => state.frame_name(),
             RedHatBoyStateMachine::Sliding(state) => state.frame_name(),
+            RedHatBoyStateMachine::Jumping(state) => state.frame_name(),
         }
     }
 
@@ -134,6 +143,7 @@ impl RedHatBoyStateMachine {
             RedHatBoyStateMachine::Idle(state) => &state.context(),
             RedHatBoyStateMachine::Running(state) => &state.context(),
             RedHatBoyStateMachine::Sliding(state) => &state.context(),
+            RedHatBoyStateMachine::Jumping(state) => &state.context(),
         }
     }
 
@@ -160,6 +170,12 @@ impl From<RedHatBoyState<Sliding>> for RedHatBoyStateMachine {
     }
 }
 
+impl From<RedHatBoyState<Jumping>> for RedHatBoyStateMachine {
+    fn from(state: RedHatBoyState<Jumping>) -> Self {
+        RedHatBoyStateMachine::Jumping(state)
+    }
+}
+
 impl From<SlidingEndState> for RedHatBoyStateMachine {
     fn from(end_state: SlidingEndState) -> Self {
         match end_state {
@@ -177,9 +193,11 @@ mod red_hat_boy_states {
     const IDLE_FRAME_NAME: &str = "Idle";
     const RUN_FRAME_NAME: &str = "Run";
     const SLIDING_FRAME_NAME: &str = "Slide";
+    const JUMPING_FRAME_NAME: &str = "Jump";
     const IDLE_FRAMES: u8 = 29;
     const RUNNING_FRAMES: u8 = 23;
     const SLIDING_FRAMES: u8 = 14;
+    const JUMPING_FRAMES: u8 = 35;
     const RUNNING_SPEED: i16 = 3;
 
     #[derive(Copy, Clone)]
@@ -209,6 +227,9 @@ mod red_hat_boy_states {
 
     #[derive(Copy, Clone)]
     pub struct Sliding;
+
+    #[derive(Copy, Clone)]
+    pub struct Jumping;
 
     impl RedHatBoyState<Idle> {
         pub fn run(self) -> RedHatBoyState<Running> {
@@ -255,6 +276,13 @@ mod red_hat_boy_states {
                 _state: Sliding {},
             }
         }
+
+        pub fn jump(self) -> RedHatBoyState<Jumping> {
+            RedHatBoyState {
+                context: self.context.reset_frame(),
+                _state: Jumping {},
+            }
+        }
     }
 
     pub enum SlidingEndState {
@@ -282,6 +310,17 @@ mod red_hat_boy_states {
                 context: self.context.reset_frame(),
                 _state: Running,
             }
+        }
+    }
+
+    impl RedHatBoyState<Jumping> {
+        pub fn frame_name(&self) -> &str {
+            JUMPING_FRAME_NAME
+        }
+
+        pub fn update(mut self) -> Self {
+            self.context = self.context.update(JUMPING_FRAMES);
+            self
         }
     }
 
@@ -347,6 +386,10 @@ impl Game for WalkTheDog {
 
             if keystate.is_pressed("ArrowLeft") {
                 velocity.x -= 3;
+            }
+
+            if keystate.is_pressed("Space") {
+                rhb.jump();
             }
 
             rhb.update();
