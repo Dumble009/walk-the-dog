@@ -27,15 +27,17 @@ pub struct Sheet {
     frames: HashMap<String, Cell>,
 }
 
-pub struct WalkTheDog {
-    rhb: Option<RedHatBoy>,
+pub enum WalkTheDog {
+    Loading,
+    Loaded(RedHatBoy),
 }
 
 impl WalkTheDog {
     pub fn new() -> Self {
-        WalkTheDog { rhb: None }
+        WalkTheDog::Loading
     }
 }
+
 enum Event {
     Run,
     Slide,
@@ -310,49 +312,57 @@ mod red_hat_boy_states {
 #[async_trait(?Send)]
 impl Game for WalkTheDog {
     async fn initialize(&self) -> Result<Box<dyn Game>> {
-        let json = browser::fetch_json("rhb.json").await?;
-        let sheet: Option<Sheet> = serde_wasm_bindgen::from_value(json)
-            .expect("Could not convert rhb.json into a Sheet structure.");
-        let image = Some(engine::load_image("rhb.png").await?);
-        Ok(Box::new(WalkTheDog {
-            rhb: Some(RedHatBoy::new(
-                sheet.clone().ok_or_else(|| anyhow!("No Sheet Present"))?,
-                image.clone().ok_or_else(|| anyhow!("No Imgage Present"))?,
-            )),
-        }))
+        match self {
+            WalkTheDog::Loading => {
+                let json = browser::fetch_json("rhb.json").await?;
+                let sheet: Option<Sheet> = serde_wasm_bindgen::from_value(json)
+                    .expect("Could not convert rhb.json into a Sheet structure.");
+                let image = Some(engine::load_image("rhb.png").await?);
+                let rhb = RedHatBoy::new(
+                    sheet.clone().ok_or_else(|| anyhow!("No Sheet Present"))?,
+                    image.clone().ok_or_else(|| anyhow!("No Imgage Present"))?,
+                );
+                Ok(Box::new(WalkTheDog::Loaded(rhb)))
+            }
+            WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized!")),
+        }
     }
 
     fn update(&mut self, keystate: &KeyState) {
-        let mut velocity = Point { x: 0, y: 0 };
-        if keystate.is_pressed("ArrowDown") {
-            velocity.y += 3;
-            self.rhb.as_mut().unwrap().slide();
-        }
+        if let WalkTheDog::Loaded(rhb) = self {
+            let mut velocity = Point { x: 0, y: 0 };
+            if keystate.is_pressed("ArrowDown") {
+                velocity.y += 3;
+                rhb.slide();
+            }
 
-        if keystate.is_pressed("ArrowUp") {
-            velocity.y -= 3;
-        }
+            if keystate.is_pressed("ArrowUp") {
+                velocity.y -= 3;
+            }
 
-        if keystate.is_pressed("ArrowRight") {
-            velocity.x += 3;
-            self.rhb.as_mut().unwrap().run_right();
-        }
+            if keystate.is_pressed("ArrowRight") {
+                velocity.x += 3;
+                rhb.run_right();
+            }
 
-        if keystate.is_pressed("ArrowLeft") {
-            velocity.x -= 3;
-        }
+            if keystate.is_pressed("ArrowLeft") {
+                velocity.x -= 3;
+            }
 
-        self.rhb.as_mut().unwrap().update();
+            rhb.update();
+        }
     }
 
     fn draw(&self, renderer: &Renderer) {
-        renderer.clear(&Rect {
-            x: 0.0,
-            y: 0.0,
-            width: 600.0,
-            height: 600.0,
-        });
+        if let WalkTheDog::Loaded(rhb) = self {
+            renderer.clear(&Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 600.0,
+                height: 600.0,
+            });
 
-        self.rhb.as_ref().unwrap().draw(renderer);
+            rhb.draw(renderer);
+        }
     }
 } // impl Game for WalkTheDog
