@@ -185,6 +185,15 @@ impl From<SlidingEndState> for RedHatBoyStateMachine {
     }
 }
 
+impl From<JumpingEndState> for RedHatBoyStateMachine {
+    fn from(end_state: JumpingEndState) -> Self {
+        match end_state {
+            JumpingEndState::Complete(running_state) => running_state.into(),
+            JumpingEndState::Jumping(jumping_state) => jumping_state.into(),
+        }
+    }
+}
+
 mod red_hat_boy_states {
     use crate::engine::Point;
 
@@ -199,6 +208,8 @@ mod red_hat_boy_states {
     const SLIDING_FRAMES: u8 = 14;
     const JUMPING_FRAMES: u8 = 35;
     const RUNNING_SPEED: i16 = 3;
+    const JUMP_SPEED: i16 = -25;
+    const GRAVITY: i16 = 1;
 
     #[derive(Copy, Clone)]
     pub struct RedHatBoyState<S> {
@@ -279,7 +290,7 @@ mod red_hat_boy_states {
 
         pub fn jump(self) -> RedHatBoyState<Jumping> {
             RedHatBoyState {
-                context: self.context.reset_frame(),
+                context: self.context.set_vertical_velocity(JUMP_SPEED).reset_frame(),
                 _state: Jumping {},
             }
         }
@@ -313,19 +324,36 @@ mod red_hat_boy_states {
         }
     }
 
+    pub enum JumpingEndState {
+        Complete(RedHatBoyState<Running>),
+        Jumping(RedHatBoyState<Jumping>),
+    }
+
     impl RedHatBoyState<Jumping> {
         pub fn frame_name(&self) -> &str {
             JUMPING_FRAME_NAME
         }
 
-        pub fn update(mut self) -> Self {
+        pub fn update(mut self) -> JumpingEndState {
             self.context = self.context.update(JUMPING_FRAMES);
-            self
+            if self.context.position.y >= FLOOR {
+                JumpingEndState::Complete(self.land())
+            } else {
+                JumpingEndState::Jumping(self)
+            }
+        }
+
+        fn land(self) -> RedHatBoyState<Running> {
+            RedHatBoyState {
+                context: self.context.reset_frame(),
+                _state: Running,
+            }
         }
     }
 
     impl RedHatBoyContext {
         fn update(mut self, frame_count: u8) -> Self {
+            self.velocity.y += GRAVITY;
             if self.frame < frame_count {
                 self.frame += 1;
             } else {
@@ -333,6 +361,9 @@ mod red_hat_boy_states {
             }
             self.position.x += self.velocity.x;
             self.position.y += self.velocity.y;
+            if self.position.y > FLOOR {
+                self.position.y = FLOOR;
+            }
             self
         }
 
@@ -343,6 +374,11 @@ mod red_hat_boy_states {
 
         fn run_right(mut self) -> Self {
             self.velocity.x += RUNNING_SPEED;
+            self
+        }
+
+        fn set_vertical_velocity(mut self, y: i16) -> Self {
+            self.velocity.y = y;
             self
         }
     }
