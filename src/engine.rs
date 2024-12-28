@@ -109,12 +109,28 @@ impl Renderer {
                 destination.height.into(),
             )
             .expect("Drawing is throwing exceptions! Uncoverable error.");
+
+        self.context.set_stroke_style_str("#FF0000");
+        self.context.stroke_rect(
+            destination.x.into(),
+            destination.y.into(),
+            destination.width.into(),
+            destination.height.into(),
+        );
     }
 
     pub fn draw_entire_image(&self, image: &HtmlImageElement, position: &Point) {
         self.context
             .draw_image_with_html_image_element(image, position.x.into(), position.y.into())
             .expect("Drawing is throwing exceptions! Unrecoverable error.");
+
+        self.context.set_stroke_style_str("#FF0000");
+        self.context.stroke_rect(
+            position.x.into(),
+            position.y.into(),
+            image.width().into(),
+            image.height().into(),
+        );
     }
 }
 
