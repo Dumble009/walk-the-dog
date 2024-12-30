@@ -9,6 +9,8 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use web_sys::HtmlImageElement;
 
+const CANVAS_HEIGHT: i16 = 600;
+
 #[derive(Deserialize, Clone)]
 struct SheetRect {
     x: i16,
@@ -33,6 +35,7 @@ pub struct Walk {
     boy: RedHatBoy,
     background: Image,
     stone: Image,
+    platform: Platform,
 }
 
 pub enum WalkTheDog {
@@ -52,6 +55,7 @@ enum Event {
     Update,
     Jump,
     KnockOut,
+    Land(f32),
 }
 
 struct RedHatBoy {
@@ -123,6 +127,10 @@ impl RedHatBoy {
         self.state_machine = self.state_machine.transition(Event::KnockOut);
     }
 
+    fn land_on(&mut self, ground_height: f32) {
+        self.state_machine = self.state_machine.transition(Event::Land(ground_height));
+    }
+
     fn bounding_box(&self) -> Rect {
         let sprite = self.current_sprite().expect("Cell not found!");
 
@@ -161,6 +169,9 @@ impl RedHatBoyStateMachine {
             (RedHatBoyStateMachine::Running(state), Event::KnockOut) => state.knock_out().into(),
             (RedHatBoyStateMachine::Jumping(state), Event::KnockOut) => state.knock_out().into(),
             (RedHatBoyStateMachine::Sliding(state), Event::KnockOut) => state.knock_out().into(),
+            (RedHatBoyStateMachine::Jumping(state), Event::Land(y)) => state.land_on(y).into(),
+            (RedHatBoyStateMachine::Running(state), Event::Land(y)) => state.land_on(y).into(),
+            (RedHatBoyStateMachine::Sliding(state), Event::Land(y)) => state.land_on(y).into(),
             _ => self,
         }
     }
@@ -274,6 +285,8 @@ mod red_hat_boy_states {
     const RUNNING_SPEED: i16 = 3;
     const JUMP_SPEED: i16 = -25;
     const GRAVITY: i16 = 1;
+    use super::CANVAS_HEIGHT;
+    const PLAYER_HEIGHT: i16 = CANVAS_HEIGHT - FLOOR;
 
     #[derive(Copy, Clone)]
     pub struct RedHatBoyState<S> {
@@ -374,6 +387,13 @@ mod red_hat_boy_states {
                 _state: Falling {},
             }
         }
+
+        pub fn land_on(self, position: f32) -> Self {
+            RedHatBoyState {
+                context: self.context.set_on(position as i16),
+                _state: Running,
+            }
+        }
     }
 
     pub enum SlidingEndState {
@@ -409,6 +429,13 @@ mod red_hat_boy_states {
                 _state: Falling {},
             }
         }
+
+        pub fn land_on(self, position: f32) -> Self {
+            RedHatBoyState {
+                context: self.context.set_on(position as i16),
+                _state: Sliding,
+            }
+        }
     }
 
     pub enum JumpingEndState {
@@ -424,15 +451,15 @@ mod red_hat_boy_states {
         pub fn update(mut self) -> JumpingEndState {
             self.context = self.context.update(JUMPING_FRAMES);
             if self.context.position.y >= FLOOR {
-                JumpingEndState::Complete(self.land())
+                JumpingEndState::Complete(self.land_on(CANVAS_HEIGHT as f32))
             } else {
                 JumpingEndState::Jumping(self)
             }
         }
 
-        fn land(self) -> RedHatBoyState<Running> {
+        pub fn land_on(self, position: f32) -> RedHatBoyState<Running> {
             RedHatBoyState {
-                context: self.context.reset_frame(),
+                context: self.context.reset_frame().set_on(position as i16),
                 _state: Running,
             }
         }
@@ -513,6 +540,13 @@ mod red_hat_boy_states {
             self.velocity.x = 0;
             self
         }
+
+        fn set_on(mut self, position: i16) -> Self {
+            let position = position - PLAYER_HEIGHT;
+            self.position.y = position;
+            self.velocity.y = 0;
+            self
+        }
     }
 }
 
@@ -527,14 +561,27 @@ impl Game for WalkTheDog {
                 let image = Some(engine::load_image("rhb.png").await?);
                 let background = engine::load_image("BG.png").await?;
                 let stone = engine::load_image("Stone.png").await?;
+
                 let rhb = RedHatBoy::new(
                     sheet.clone().ok_or_else(|| anyhow!("No Sheet Present"))?,
                     image.clone().ok_or_else(|| anyhow!("No Imgage Present"))?,
                 );
+
+                let json = browser::fetch_json("tiles.json").await?;
+                let sheet: Option<Sheet> = serde_wasm_bindgen::from_value(json)
+                    .expect("Could not convert tiles.json into a Sheet structure.");
+
+                let platform = Platform::new(
+                    sheet.expect("Could not load tiles.json"),
+                    engine::load_image("tiles.png").await?,
+                    Point { x: 200, y: 400 },
+                );
+
                 Ok(Box::new(WalkTheDog::Loaded(Walk {
                     boy: rhb,
                     background: Image::new(background, Point { x: 0, y: 0 }),
                     stone: Image::new(stone, Point { x: 150, y: 546 }),
+                    platform,
                 })))
             }
             WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized!")),
@@ -571,6 +618,14 @@ impl Game for WalkTheDog {
             if walk
                 .boy
                 .bounding_box()
+                .intersects(&walk.platform.bounding_box())
+            {
+                walk.boy.land_on(walk.platform.bounding_box().y);
+            }
+
+            if walk
+                .boy
+                .bounding_box()
                 .intersects(walk.stone.bounding_box())
             {
                 walk.boy.knock_out();
@@ -584,12 +639,63 @@ impl Game for WalkTheDog {
                 x: 0.0,
                 y: 0.0,
                 width: 600.0,
-                height: 600.0,
+                height: CANVAS_HEIGHT as f32,
             });
 
             walk.background.draw(renderer);
             walk.boy.draw(renderer);
             walk.stone.draw(renderer);
+            walk.platform.draw(renderer);
         }
     }
 } // impl Game for WalkTheDog
+
+struct Platform {
+    sheet: Sheet,
+    image: HtmlImageElement,
+    position: Point,
+}
+
+impl Platform {
+    fn new(sheet: Sheet, image: HtmlImageElement, position: Point) -> Self {
+        Platform {
+            sheet: sheet,
+            image: image,
+            position: position,
+        }
+    }
+
+    fn bounding_box(&self) -> Rect {
+        let platform = self
+            .sheet
+            .frames
+            .get("13.png")
+            .expect("13.png does not exist");
+
+        Rect {
+            x: self.position.x.into(),
+            y: self.position.y.into(),
+            width: (platform.frame.w * 3).into(),
+            height: platform.frame.h.into(),
+        }
+    }
+
+    fn draw(&self, renderer: &Renderer) {
+        let platform = self
+            .sheet
+            .frames
+            .get("13.png")
+            .expect("13.png does not exist");
+
+        renderer.draw_image(
+            &self.image,
+            &Rect {
+                x: platform.frame.x.into(),
+                y: platform.frame.y.into(),
+                width: (platform.frame.w * 3).into(),
+                height: platform.frame.h.into(),
+            },
+            &self.bounding_box(),
+        );
+    }
+}
