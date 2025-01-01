@@ -33,9 +33,15 @@ pub struct Sheet {
 
 pub struct Walk {
     boy: RedHatBoy,
-    background: Image,
+    backgrounds: [Image; 2],
     stone: Image,
     platform: Platform,
+}
+
+impl Walk {
+    fn velocity(&self) -> i16 {
+        -self.boy.walking_speed()
+    }
 }
 
 pub enum WalkTheDog {
@@ -165,6 +171,10 @@ impl RedHatBoy {
 
     fn velocity_y(&self) -> i16 {
         self.state_machine.context().velocity.y
+    }
+
+    fn walking_speed(&self) -> i16 {
+        self.state_machine.context().velocity.x
     }
 }
 
@@ -552,7 +562,6 @@ mod red_hat_boy_states {
             } else {
                 self.frame = 0;
             }
-            self.position.x += self.velocity.x;
             self.position.y += self.velocity.y;
             if self.position.y > FLOOR {
                 self.position.y = FLOOR;
@@ -631,9 +640,19 @@ impl Game for WalkTheDog {
                     },
                 );
 
+                let background_width = background.width() as i16;
                 Ok(Box::new(WalkTheDog::Loaded(Walk {
                     boy: rhb,
-                    background: Image::new(background, Point { x: 0, y: 0 }),
+                    backgrounds: [
+                        Image::new(background.clone(), Point { x: 0, y: 0 }),
+                        Image::new(
+                            background,
+                            Point {
+                                x: background_width,
+                                y: 0,
+                            },
+                        ),
+                    ],
                     stone: Image::new(stone, Point { x: 150, y: 546 }),
                     platform,
                 })))
@@ -669,6 +688,21 @@ impl Game for WalkTheDog {
 
             walk.boy.update();
 
+            let velocity = walk.velocity();
+            walk.platform.position.x += velocity;
+            walk.stone.move_horizontally(velocity);
+            let [first_background, second_background] = &mut walk.backgrounds;
+            first_background.move_horizontally(velocity);
+            second_background.move_horizontally(velocity);
+
+            if first_background.right() < 0 {
+                first_background.set_x(second_background.right());
+            }
+
+            if second_background.right() < 0 {
+                second_background.set_x(first_background.right());
+            }
+
             if walk.platform.intersects(&walk.boy.bounding_box()) {
                 if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
                     walk.boy.land_on(walk.platform.destination_box().y);
@@ -696,7 +730,9 @@ impl Game for WalkTheDog {
                 height: CANVAS_HEIGHT as f32,
             });
 
-            walk.background.draw(renderer);
+            walk.backgrounds.iter().for_each(|background| {
+                background.draw(renderer);
+            });
             walk.boy.draw(renderer);
             walk.stone.draw(renderer);
             walk.platform.draw(renderer);
