@@ -61,7 +61,7 @@ enum Event {
     Update,
     Jump,
     KnockOut,
-    Land(f32),
+    Land(i16),
 }
 
 struct RedHatBoy {
@@ -96,12 +96,12 @@ impl RedHatBoy {
 
         renderer.draw_image(
             &self.image,
-            &Rect {
-                x: sprite.frame.x.into(),
-                y: sprite.frame.y.into(),
-                width: sprite.frame.w.into(),
-                height: sprite.frame.h.into(),
-            },
+            &Rect::new_from_x_y(
+                sprite.frame.x.into(),
+                sprite.frame.y.into(),
+                sprite.frame.w.into(),
+                sprite.frame.h.into(),
+            ),
             &self.destination_box(),
         );
 
@@ -128,7 +128,7 @@ impl RedHatBoy {
         self.state_machine = self.state_machine.transition(Event::KnockOut);
     }
 
-    fn land_on(&mut self, ground_height: f32) {
+    fn land_on(&mut self, ground_height: i16) {
         self.state_machine = self.state_machine.transition(Event::Land(ground_height));
     }
 
@@ -141,28 +141,27 @@ impl RedHatBoy {
     }
 
     fn bounding_box(&self) -> Rect {
-        const X_OFFSET: f32 = 18.0;
-        const Y_OFFSET: f32 = 14.0;
-        const WIDTH_OFFSET: f32 = 28.0;
-        let mut bounding_box = self.destination_box();
-        bounding_box.x += X_OFFSET;
-        bounding_box.width -= WIDTH_OFFSET;
-        bounding_box.y += Y_OFFSET;
-        bounding_box.height -= Y_OFFSET;
-        bounding_box
+        const X_OFFSET: i16 = 18;
+        const Y_OFFSET: i16 = 14;
+        const WIDTH_OFFSET: i16 = 28;
+        let destination_box = self.destination_box();
+        Rect::new_from_x_y(
+            destination_box.x() + X_OFFSET,
+            destination_box.y() + Y_OFFSET,
+            destination_box.width - WIDTH_OFFSET,
+            destination_box.height - Y_OFFSET,
+        )
     }
 
     fn destination_box(&self) -> Rect {
         let sprite = self.current_sprite().expect("Cell not found!");
 
-        Rect {
-            x: (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16)
-                .into(),
-            y: (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16)
-                .into(),
-            width: sprite.frame.w.into(),
-            height: sprite.frame.h.into(),
-        }
+        Rect::new_from_x_y(
+            (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16).into(),
+            (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16).into(),
+            sprite.frame.w.into(),
+            sprite.frame.h.into(),
+        )
     }
 
     fn pos_y(&self) -> i16 {
@@ -423,9 +422,9 @@ mod red_hat_boy_states {
             }
         }
 
-        pub fn land_on(self, position: f32) -> Self {
+        pub fn land_on(self, position: i16) -> Self {
             RedHatBoyState {
-                context: self.context.set_on(position as i16),
+                context: self.context.set_on(position),
                 _state: Running,
             }
         }
@@ -465,7 +464,7 @@ mod red_hat_boy_states {
             }
         }
 
-        pub fn land_on(self, position: f32) -> Self {
+        pub fn land_on(self, position: i16) -> Self {
             RedHatBoyState {
                 context: self.context.set_on(position as i16),
                 _state: Sliding,
@@ -486,13 +485,13 @@ mod red_hat_boy_states {
         pub fn update(mut self) -> JumpingEndState {
             self.context = self.context.update(JUMPING_FRAMES);
             if self.context.position.y >= FLOOR {
-                JumpingEndState::Complete(self.land_on(CANVAS_HEIGHT as f32))
+                JumpingEndState::Complete(self.land_on(CANVAS_HEIGHT))
             } else {
                 JumpingEndState::Jumping(self)
             }
         }
 
-        pub fn land_on(self, position: f32) -> RedHatBoyState<Running> {
+        pub fn land_on(self, position: i16) -> RedHatBoyState<Running> {
             RedHatBoyState {
                 context: self.context.reset_frame().set_on(position as i16),
                 _state: Running,
@@ -548,8 +547,8 @@ mod red_hat_boy_states {
             self
         }
 
-        pub fn land_on(mut self, position: f32) -> Self {
-            self.context = self.context.set_on(position as i16);
+        pub fn land_on(mut self, position: i16) -> Self {
+            self.context = self.context.set_on(position);
             self
         }
     }
@@ -705,7 +704,7 @@ impl Game for WalkTheDog {
 
             if walk.platform.intersects(&walk.boy.bounding_box()) {
                 if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
-                    walk.boy.land_on(walk.platform.destination_box().y);
+                    walk.boy.land_on(walk.platform.destination_box().y());
                 } else {
                     walk.boy.knock_out();
                 }
@@ -723,12 +722,7 @@ impl Game for WalkTheDog {
 
     fn draw(&self, renderer: &Renderer) {
         if let WalkTheDog::Loaded(walk) = self {
-            renderer.clear(&Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 600.0,
-                height: CANVAS_HEIGHT as f32,
-            });
+            renderer.clear(&Rect::new_from_x_y(0, 0, 600, CANVAS_HEIGHT));
 
             walk.backgrounds.iter().for_each(|background| {
                 background.draw(renderer);
@@ -762,38 +756,37 @@ impl Platform {
             .get("13.png")
             .expect("13.png does not exist");
 
-        Rect {
-            x: self.position.x.into(),
-            y: self.position.y.into(),
-            width: (platform.frame.w * 3).into(),
-            height: platform.frame.h.into(),
-        }
+        Rect::new(
+            self.position,
+            (platform.frame.w * 3).into(),
+            platform.frame.h.into(),
+        )
     }
 
     fn bounding_boxes(&self) -> Vec<Rect> {
-        const X_OFFSET: f32 = 60.0;
-        const END_HEIGHT: f32 = 54.0;
+        const X_OFFSET: i16 = 60;
+        const END_HEIGHT: i16 = 54;
         let destination_box = self.destination_box();
-        let bounding_box_one = Rect {
-            x: destination_box.x,
-            y: destination_box.y,
-            width: X_OFFSET,
-            height: END_HEIGHT,
-        };
+        let bounding_box_one = Rect::new_from_x_y(
+            destination_box.x(),
+            destination_box.y(),
+            X_OFFSET,
+            END_HEIGHT,
+        );
 
-        let bounding_box_two = Rect {
-            x: destination_box.x + X_OFFSET,
-            y: destination_box.y,
-            width: destination_box.width - (X_OFFSET * 2.0),
-            height: destination_box.height,
-        };
+        let bounding_box_two = Rect::new_from_x_y(
+            destination_box.x() + X_OFFSET,
+            destination_box.y(),
+            destination_box.width - (X_OFFSET * 2),
+            destination_box.height,
+        );
 
-        let bounding_box_three = Rect {
-            x: destination_box.x + destination_box.width - X_OFFSET,
-            y: destination_box.y,
-            width: X_OFFSET,
-            height: END_HEIGHT,
-        };
+        let bounding_box_three = Rect::new_from_x_y(
+            destination_box.x() + destination_box.width - X_OFFSET,
+            destination_box.y(),
+            X_OFFSET,
+            END_HEIGHT,
+        );
 
         vec![bounding_box_one, bounding_box_two, bounding_box_three]
     }
@@ -807,12 +800,12 @@ impl Platform {
 
         renderer.draw_image(
             &self.image,
-            &Rect {
-                x: platform.frame.x.into(),
-                y: platform.frame.y.into(),
-                width: (platform.frame.w * 3).into(),
-                height: platform.frame.h.into(),
-            },
+            &&Rect::new_from_x_y(
+                platform.frame.x.into(),
+                platform.frame.y.into(),
+                (platform.frame.w * 3).into(),
+                platform.frame.h.into(),
+            ),
             &self.destination_box(),
         );
 
@@ -823,7 +816,7 @@ impl Platform {
 
     fn intersects(&self, rect: &Rect) -> bool {
         for bb in &self.bounding_boxes() {
-            if (bb.intersects(rect)) {
+            if bb.intersects(rect) {
                 return true;
             }
         }
