@@ -31,11 +31,17 @@ pub struct Sheet {
     frames: HashMap<String, Cell>,
 }
 
+pub trait Obstacle {
+    fn check_intersection(&self, boy: &mut RedHatBoy);
+    fn draw(&self, renderer: &Renderer);
+    fn move_horizontally(&mut self, x: i16);
+    fn right(&self) -> i16;
+}
+
 pub struct Walk {
     boy: RedHatBoy,
     backgrounds: [Image; 2],
-    stone: Image,
-    platform: Platform,
+    obstacles: Vec<Box<dyn Obstacle>>,
 }
 
 impl Walk {
@@ -64,7 +70,7 @@ enum Event {
     Land(i16),
 }
 
-struct RedHatBoy {
+pub struct RedHatBoy {
     state_machine: RedHatBoyStateMachine,
     sprite_sheet: Sheet,
     image: HtmlImageElement,
@@ -652,8 +658,10 @@ impl Game for WalkTheDog {
                             },
                         ),
                     ],
-                    stone: Image::new(stone, Point { x: 150, y: 546 }),
-                    platform,
+                    obstacles: vec![
+                        Box::new(Barrier::new(Image::new(stone, Point { x: 150, y: 546 }))),
+                        Box::new(platform),
+                    ],
                 })))
             }
             WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized!")),
@@ -688,8 +696,7 @@ impl Game for WalkTheDog {
             walk.boy.update();
 
             let velocity = walk.velocity();
-            walk.platform.position.x += velocity;
-            walk.stone.move_horizontally(velocity);
+
             let [first_background, second_background] = &mut walk.backgrounds;
             first_background.move_horizontally(velocity);
             second_background.move_horizontally(velocity);
@@ -702,21 +709,13 @@ impl Game for WalkTheDog {
                 second_background.set_x(first_background.right());
             }
 
-            if walk.platform.intersects(&walk.boy.bounding_box()) {
-                if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
-                    walk.boy.land_on(walk.platform.destination_box().y());
-                } else {
-                    walk.boy.knock_out();
-                }
-            }
+            walk.obstacles.retain(|obstacle| obstacle.right() > 0);
 
-            if walk
-                .boy
-                .bounding_box()
-                .intersects(walk.stone.bounding_box())
-            {
-                walk.boy.knock_out();
-            }
+            let boy_ref = &mut walk.boy;
+            walk.obstacles.iter_mut().for_each(|obstacle| {
+                obstacle.move_horizontally(velocity);
+                obstacle.check_intersection(boy_ref);
+            });
         }
     }
 
@@ -728,8 +727,9 @@ impl Game for WalkTheDog {
                 background.draw(renderer);
             });
             walk.boy.draw(renderer);
-            walk.stone.draw(renderer);
-            walk.platform.draw(renderer);
+            walk.obstacles.iter().for_each(|obstacle| {
+                obstacle.draw(renderer);
+            });
         }
     }
 } // impl Game for WalkTheDog
@@ -791,6 +791,18 @@ impl Platform {
         vec![bounding_box_one, bounding_box_two, bounding_box_three]
     }
 
+    fn intersects(&self, rect: &Rect) -> Option<Rect> {
+        for bb in &self.bounding_boxes() {
+            if bb.intersects(rect) {
+                return Some(*bb);
+            }
+        }
+
+        return None;
+    }
+}
+
+impl Obstacle for Platform {
     fn draw(&self, renderer: &Renderer) {
         let platform = self
             .sheet
@@ -814,13 +826,54 @@ impl Platform {
         }
     }
 
-    fn intersects(&self, rect: &Rect) -> bool {
-        for bb in &self.bounding_boxes() {
-            if bb.intersects(rect) {
-                return true;
+    fn move_horizontally(&mut self, x: i16) {
+        self.position.x += x;
+    }
+
+    fn check_intersection(&self, boy: &mut RedHatBoy) {
+        if let Some(box_to_land_on) = self.intersects(&boy.bounding_box()) {
+            if boy.velocity_y() > 0 && boy.pos_y() < self.position.y {
+                boy.land_on(box_to_land_on.y());
+            } else {
+                boy.knock_out();
             }
         }
+    }
 
-        return false;
+    fn right(&self) -> i16 {
+        self.bounding_boxes()
+            .last()
+            .unwrap_or(&Rect::default())
+            .right()
+    }
+}
+
+struct Barrier {
+    image: Image,
+}
+
+impl Barrier {
+    pub fn new(image: Image) -> Self {
+        Barrier { image }
+    }
+}
+
+impl Obstacle for Barrier {
+    fn check_intersection(&self, boy: &mut RedHatBoy) {
+        if boy.bounding_box().intersects(self.image.bounding_box()) {
+            boy.knock_out();
+        }
+    }
+
+    fn draw(&self, renderer: &Renderer) {
+        self.image.draw(renderer);
+    }
+
+    fn move_horizontally(&mut self, x: i16) {
+        self.image.move_horizontally(x)
+    }
+
+    fn right(&self) -> i16 {
+        self.image.right()
     }
 }
