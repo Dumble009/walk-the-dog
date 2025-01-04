@@ -5,6 +5,7 @@ use browser::LoopClosure;
 use futures::channel::mpsc::unbounded;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::channel::oneshot::channel;
+use serde::Deserialize;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -13,6 +14,45 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::CanvasRenderingContext2d;
 use web_sys::HtmlImageElement;
+
+#[derive(Deserialize, Clone)]
+pub struct SheetRect {
+    pub x: i16,
+    pub y: i16,
+    pub w: i16,
+    pub h: i16,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Cell {
+    pub frame: SheetRect,
+    pub sprite_source_size: SheetRect,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Sheet {
+    pub frames: HashMap<String, Cell>,
+}
+
+pub struct SpriteSheet {
+    sheet: Sheet,
+    image: HtmlImageElement,
+}
+
+impl SpriteSheet {
+    pub fn new(sheet: Sheet, image: HtmlImageElement) -> Self {
+        SpriteSheet { sheet, image }
+    }
+
+    pub fn cell(&self, name: &str) -> Option<&Cell> {
+        self.sheet.frames.get(name)
+    }
+
+    pub fn draw(&self, renderer: &Renderer, source: &Rect, destination: &Rect) {
+        renderer.draw_image(&self.image, source, destination);
+    }
+}
 
 #[derive(Clone, Copy, Default)]
 pub struct Point {
