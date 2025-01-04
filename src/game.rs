@@ -327,6 +327,7 @@ mod red_hat_boy_states {
     const GRAVITY: i16 = 1;
     use super::CANVAS_HEIGHT;
     const PLAYER_HEIGHT: i16 = CANVAS_HEIGHT - FLOOR;
+    const FALLING_TERMINAL_SPEED: i16 = 20;
 
     #[derive(Copy, Clone)]
     pub struct RedHatBoyState<S> {
@@ -562,6 +563,10 @@ mod red_hat_boy_states {
     impl RedHatBoyContext {
         fn update(mut self, frame_count: u8) -> Self {
             self.velocity.y += GRAVITY;
+            if self.velocity.y >= FALLING_TERMINAL_SPEED {
+                self.velocity.y = FALLING_TERMINAL_SPEED;
+            }
+
             if self.frame < frame_count {
                 self.frame += 1;
             } else {
