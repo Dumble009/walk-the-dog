@@ -4,6 +4,7 @@ use crate::engine;
 use crate::engine::KeyState;
 use crate::engine::SpriteSheet;
 use crate::engine::{Cell, Game, Image, Point, Rect, Renderer, Sheet};
+use crate::segment::stone_and_platform;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use std::rc::Rc;
@@ -643,7 +644,6 @@ impl Game for WalkTheDog {
 
                 let background_width = background.width() as i16;
                 Ok(Box::new(WalkTheDog::Loaded(Walk {
-                    obstacle_sheet: sprite_sheet,
                     boy: rhb,
                     backgrounds: [
                         Image::new(background.clone(), Point { x: 0, y: 0 }),
@@ -655,10 +655,8 @@ impl Game for WalkTheDog {
                             },
                         ),
                     ],
-                    obstacles: vec![
-                        Box::new(Barrier::new(Image::new(stone, Point { x: 150, y: 546 }))),
-                        Box::new(platform),
-                    ],
+                    obstacles: stone_and_platform(stone, sprite_sheet.clone(), 0),
+                    obstacle_sheet: sprite_sheet,
                 })))
             }
             WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized!")),
@@ -731,7 +729,7 @@ impl Game for WalkTheDog {
     }
 } // impl Game for WalkTheDog
 
-struct Platform {
+pub struct Platform {
     sheet: Rc<SpriteSheet>,
     position: Point,
     bounding_boxes: Vec<Rect>,
@@ -739,7 +737,7 @@ struct Platform {
 }
 
 impl Platform {
-    fn new(
+    pub fn new(
         sheet: Rc<SpriteSheet>,
         position: Point,
         sprite_names: &[&str],
@@ -837,7 +835,7 @@ impl Obstacle for Platform {
     }
 }
 
-struct Barrier {
+pub struct Barrier {
     image: Image,
 }
 
