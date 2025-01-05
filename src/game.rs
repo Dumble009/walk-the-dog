@@ -4,20 +4,13 @@ use crate::engine;
 use crate::engine::KeyState;
 use crate::engine::SpriteSheet;
 use crate::engine::{Cell, Game, Image, Point, Rect, Renderer, Sheet};
-use crate::segment::stone_and_platform;
+use crate::segment::{stone_and_platform, Disturbee, Obstacle};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use std::rc::Rc;
 use web_sys::HtmlImageElement;
 
 const CANVAS_HEIGHT: i16 = 600;
-
-pub trait Obstacle {
-    fn check_intersection(&self, boy: &mut RedHatBoy);
-    fn draw(&self, renderer: &Renderer);
-    fn move_horizontally(&mut self, x: i16);
-    fn right(&self) -> i16;
-}
 
 pub struct Walk {
     obstacle_sheet: Rc<SpriteSheet>,
@@ -112,33 +105,12 @@ impl RedHatBoy {
         self.state_machine = self.state_machine.transition(Event::Jump);
     }
 
-    fn knock_out(&mut self) {
-        self.state_machine = self.state_machine.transition(Event::KnockOut);
-    }
-
-    fn land_on(&mut self, ground_height: i16) {
-        self.state_machine = self.state_machine.transition(Event::Land(ground_height));
-    }
-
     fn log_context(&self) {
         log!(
             "position.y : {}, velocity.y : {}",
             self.state_machine.context().position.y,
             self.state_machine.context().velocity.y
         );
-    }
-
-    fn bounding_box(&self) -> Rect {
-        const X_OFFSET: i16 = 18;
-        const Y_OFFSET: i16 = 14;
-        const WIDTH_OFFSET: i16 = 28;
-        let destination_box = self.destination_box();
-        Rect::new_from_x_y(
-            destination_box.x() + X_OFFSET,
-            destination_box.y() + Y_OFFSET,
-            destination_box.width - WIDTH_OFFSET,
-            destination_box.height - Y_OFFSET,
-        )
     }
 
     fn destination_box(&self) -> Rect {
@@ -152,16 +124,39 @@ impl RedHatBoy {
         )
     }
 
-    fn pos_y(&self) -> i16 {
-        self.state_machine.context().position.y
+    fn walking_speed(&self) -> i16 {
+        self.state_machine.context().velocity.x
+    }
+}
+
+impl Disturbee for RedHatBoy {
+    fn bounding_box(&self) -> Rect {
+        const X_OFFSET: i16 = 18;
+        const Y_OFFSET: i16 = 14;
+        const WIDTH_OFFSET: i16 = 28;
+        let destination_box = self.destination_box();
+        Rect::new_from_x_y(
+            destination_box.x() + X_OFFSET,
+            destination_box.y() + Y_OFFSET,
+            destination_box.width - WIDTH_OFFSET,
+            destination_box.height - Y_OFFSET,
+        )
     }
 
     fn velocity_y(&self) -> i16 {
         self.state_machine.context().velocity.y
     }
 
-    fn walking_speed(&self) -> i16 {
-        self.state_machine.context().velocity.x
+    fn pos_y(&self) -> i16 {
+        self.state_machine.context().position.y
+    }
+
+    fn land_on(&mut self, ground_height: i16) {
+        self.state_machine = self.state_machine.transition(Event::Land(ground_height));
+    }
+
+    fn knock_out(&mut self) {
+        self.state_machine = self.state_machine.transition(Event::KnockOut);
     }
 }
 
@@ -628,20 +623,6 @@ impl Game for WalkTheDog {
                     engine::load_image("tiles.png").await?,
                 ));
 
-                let platform = Platform::new(
-                    sprite_sheet.clone(),
-                    Point {
-                        x: FIRST_PLATFORM,
-                        y: LOW_PLATFORM,
-                    },
-                    &["13.png", "14.png", "15.png"],
-                    &[
-                        Rect::new_from_x_y(0, 0, 60, 54),
-                        Rect::new_from_x_y(60, 0, 384 - (60 * 2), 93),
-                        Rect::new_from_x_y(384 - 60, 0, 60, 54),
-                    ],
-                );
-
                 let background_width = background.width() as i16;
                 Ok(Box::new(WalkTheDog::Loaded(Walk {
                     boy: rhb,
@@ -728,139 +709,3 @@ impl Game for WalkTheDog {
         }
     }
 } // impl Game for WalkTheDog
-
-pub struct Platform {
-    sheet: Rc<SpriteSheet>,
-    position: Point,
-    bounding_boxes: Vec<Rect>,
-    sprites: Vec<Cell>,
-}
-
-impl Platform {
-    pub fn new(
-        sheet: Rc<SpriteSheet>,
-        position: Point,
-        sprite_names: &[&str],
-        bounding_boxes: &[Rect],
-    ) -> Self {
-        let sprites = sprite_names
-            .iter()
-            .filter_map(|sprite_name| sheet.cell(sprite_name).cloned())
-            .collect();
-
-        let bounding_boxes = bounding_boxes
-            .iter()
-            .map(|bounding_box| {
-                Rect::new_from_x_y(
-                    bounding_box.x() + position.x,
-                    bounding_box.y() + position.y,
-                    bounding_box.width,
-                    bounding_box.height,
-                )
-            })
-            .collect();
-
-        Platform {
-            sheet: sheet,
-            position: position,
-            sprites: sprites,
-            bounding_boxes: bounding_boxes,
-        }
-    }
-
-    fn bounding_boxes(&self) -> &Vec<Rect> {
-        &self.bounding_boxes
-    }
-
-    fn intersects(&self, rect: &Rect) -> Option<Rect> {
-        for bb in &self.bounding_boxes {
-            if bb.intersects(rect) {
-                return Some(*bb);
-            }
-        }
-
-        return None;
-    }
-}
-
-impl Obstacle for Platform {
-    fn draw(&self, renderer: &Renderer) {
-        let mut x = 0;
-        self.sprites.iter().for_each(|sprite| {
-            self.sheet.draw(
-                renderer,
-                &Rect::new_from_x_y(
-                    sprite.frame.x,
-                    sprite.frame.y,
-                    sprite.frame.w,
-                    sprite.frame.h,
-                ),
-                &Rect::new_from_x_y(
-                    self.position.x + x,
-                    self.position.y,
-                    sprite.frame.w,
-                    sprite.frame.h,
-                ),
-            );
-            x += sprite.frame.w;
-        });
-
-        self.bounding_boxes.iter().for_each(|bb| {
-            renderer.draw_bounding_box(bb);
-        });
-    }
-
-    fn move_horizontally(&mut self, x: i16) {
-        self.position.x += x;
-        self.bounding_boxes.iter_mut().for_each(|bounding_box| {
-            bounding_box.set_x(bounding_box.position.x + x);
-        });
-    }
-
-    fn check_intersection(&self, boy: &mut RedHatBoy) {
-        if let Some(box_to_land_on) = self.intersects(&boy.bounding_box()) {
-            if boy.velocity_y() > 0 && boy.pos_y() < self.position.y {
-                boy.land_on(box_to_land_on.y());
-            } else {
-                boy.knock_out();
-            }
-        }
-    }
-
-    fn right(&self) -> i16 {
-        self.bounding_boxes()
-            .last()
-            .unwrap_or(&Rect::default())
-            .right()
-    }
-}
-
-pub struct Barrier {
-    image: Image,
-}
-
-impl Barrier {
-    pub fn new(image: Image) -> Self {
-        Barrier { image }
-    }
-}
-
-impl Obstacle for Barrier {
-    fn check_intersection(&self, boy: &mut RedHatBoy) {
-        if boy.bounding_box().intersects(self.image.bounding_box()) {
-            boy.knock_out();
-        }
-    }
-
-    fn draw(&self, renderer: &Renderer) {
-        self.image.draw(renderer);
-    }
-
-    fn move_horizontally(&mut self, x: i16) {
-        self.image.move_horizontally(x)
-    }
-
-    fn right(&self) -> i16 {
-        self.image.right()
-    }
-}
