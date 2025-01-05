@@ -2,11 +2,6 @@ use crate::engine::{Cell, Image, Point, Rect, Renderer, SpriteSheet};
 use std::rc::Rc;
 use web_sys::HtmlImageElement;
 
-const FIRST_PLATFORM: i16 = 370;
-const STONE_ON_GROUND: i16 = 546;
-const LOW_PLATFORM: i16 = 420;
-const HIGH_PLATFORM: i16 = 375;
-
 // 障害物とインタラクトするオブジェクトが実装するトレイト
 pub trait Disturbee {
     fn bounding_box(&self) -> Rect;
@@ -162,12 +157,17 @@ impl Obstacle for Barrier {
     }
 }
 
+const STONE_ON_GROUND: i16 = 546;
+const LOW_PLATFORM: i16 = 420;
+const HIGH_PLATFORM: i16 = 375;
+
 pub fn stone_and_platform(
     stone: HtmlImageElement,
     sprite_sheet: Rc<SpriteSheet>,
     offset_x: i16,
 ) -> Vec<Box<dyn Obstacle>> {
     const INITIAL_STONE_OFFSET: i16 = 150;
+    const FIRST_PLATFORM: i16 = 370;
     vec![
         Box::new(Barrier::new(Image::new(
             stone,
@@ -183,6 +183,31 @@ pub fn stone_and_platform(
                 y: LOW_PLATFORM,
             },
         )),
+    ]
+}
+
+pub fn platform_and_stone(
+    stone: HtmlImageElement,
+    sprite_sheet: Rc<SpriteSheet>,
+    offset_x: i16,
+) -> Vec<Box<dyn Obstacle>> {
+    const INITIAL_PLATFORM_OFFSET: i16 = 150;
+    const FIRST_STONE: i16 = 370;
+    vec![
+        Box::new(create_floating_platform(
+            sprite_sheet,
+            Point {
+                x: offset_x + INITIAL_PLATFORM_OFFSET,
+                y: HIGH_PLATFORM,
+            },
+        )),
+        Box::new(Barrier::new(Image::new(
+            stone,
+            Point {
+                x: offset_x + FIRST_STONE,
+                y: STONE_ON_GROUND,
+            },
+        ))),
     ]
 }
 
