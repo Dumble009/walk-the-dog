@@ -4,6 +4,7 @@ use wasm_bindgen::closure::{IntoWasmClosure, WasmClosure, WasmClosureFnOnce};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
+use web_sys::js_sys::ArrayBuffer;
 use web_sys::HtmlImageElement;
 use web_sys::{CanvasRenderingContext2d, Document, HtmlCanvasElement, Response, Window};
 
@@ -58,11 +59,15 @@ pub async fn fetch_with_str(resource: &str) -> Result<JsValue> {
         .map_err(|err| anyhow!("error fetching {:?}", err))
 }
 
-pub async fn fetch_json(json_path: &str) -> Result<JsValue> {
-    let resp_value = fetch_with_str(json_path).await?;
-    let resp: Response = resp_value
+pub async fn fetch_response(resource: &str) -> Result<Response> {
+    fetch_with_str(resource)
+        .await?
         .dyn_into()
-        .map_err(|element| anyhow!("Error converting {:#?} to Response", element))?;
+        .map_err(|err| anyhow!("error converting fetch to Response {:#?}", err))
+}
+
+pub async fn fetch_json(json_path: &str) -> Result<JsValue> {
+    let resp = fetch_response(json_path).await?;
 
     JsFuture::from(
         resp.json()
@@ -70,6 +75,19 @@ pub async fn fetch_json(json_path: &str) -> Result<JsValue> {
     )
     .await
     .map_err(|err| anyhow!("error fetching JSON {:#?}", err))
+}
+
+pub async fn fetch_array_buffer(resource: &str) -> Result<ArrayBuffer> {
+    let array_buffer = fetch_response(resource)
+        .await?
+        .array_buffer()
+        .map_err(|err| anyhow!("Error loading array buffer {:#?}", err))?;
+
+    JsFuture::from(array_buffer)
+        .await
+        .map_err(|err| anyhow!("Error converting array buffer into a future {:#?}", err))?
+        .dyn_into()
+        .map_err(|err| anyhow!("Error converting raw JSValue to ArrayBuffer {:#?}", err))
 }
 
 pub fn new_image() -> Result<HtmlImageElement> {
