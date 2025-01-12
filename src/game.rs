@@ -641,11 +641,6 @@ mod red_hat_boy_states {
     }
 }
 
-const LOW_PLATFORM: i16 = 420;
-const HIGH_PLATFORM: i16 = 375;
-
-const FIRST_PLATFORM: i16 = 370;
-
 #[async_trait(?Send)]
 impl Game for WalkTheDog {
     async fn initialize(&self) -> Result<Box<dyn Game>> {
@@ -660,6 +655,8 @@ impl Game for WalkTheDog {
 
                 let audio = Audio::new()?;
                 let sound = audio.load_sound("SFX_Jump_23.mp3").await?;
+                let background_music = audio.load_sound("background_song.mp3").await?;
+                audio.play_looping_sound(&background_music)?;
 
                 let rhb = RedHatBoy::new(
                     sheet.clone().ok_or_else(|| anyhow!("No Sheet Present"))?,
