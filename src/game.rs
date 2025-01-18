@@ -656,7 +656,7 @@ impl Game for WalkTheDog {
                 let audio = Audio::new()?;
                 let sound = audio.load_sound("SFX_Jump_23.mp3").await?;
                 let background_music = audio.load_sound("background_song.mp3").await?;
-                audio.play_looping_sound(&background_music)?;
+                // audio.play_looping_sound(&background_music)?; // BGMの再生処理
 
                 let rhb = RedHatBoy::new(
                     sheet.clone().ok_or_else(|| anyhow!("No Sheet Present"))?,
