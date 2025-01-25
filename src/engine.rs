@@ -15,6 +15,7 @@ use wasm_bindgen::JsCast;
 use web_sys::AudioBuffer;
 use web_sys::AudioContext;
 use web_sys::CanvasRenderingContext2d;
+use web_sys::HtmlElement;
 use web_sys::HtmlImageElement;
 
 #[derive(Deserialize, Clone)]
@@ -384,4 +385,15 @@ impl Audio {
     pub fn play_looping_sound(&self, sound: &Sound) -> Result<()> {
         sound::play_sound(&self.context, &sound.buffer, sound::LOOPING::YES)
     }
+}
+
+pub fn add_click_handler(elem: HtmlElement) -> UnboundedReceiver<()> {
+    let (mut click_sender, click_receiver) = unbounded();
+    let on_click = browser::closure_wrap(Box::new(move || {
+        click_sender.start_send(());
+    }) as Box<dyn FnMut()>);
+
+    elem.set_onclick(Some(on_click.as_ref().unchecked_ref()));
+    on_click.forget();
+    click_receiver
 }
