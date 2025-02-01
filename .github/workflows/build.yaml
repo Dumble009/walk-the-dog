@@ -18,6 +18,7 @@ jobs:
           version: 0.9.1
           use-tool-cache: true
       - name: Annotate commit with clippy warnings
-        uses: actions-rs/clippy-check@v1
+        uses: actions-rs/clippy-check@v1.0.7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
