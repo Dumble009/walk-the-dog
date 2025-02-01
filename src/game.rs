@@ -1,4 +1,10 @@
 use self::red_hat_boy_states::*;
+#[cfg(test)]
+mod test_browser;
+#[cfg(test)]
+use test_browser as browser;
+
+#[cfg(not(test))]
 use crate::browser;
 use crate::engine;
 use crate::engine::Audio;
